@@ -42,6 +42,7 @@ style:
   vertical_text_with_wrap: false
   layout:
     align_type: center
+    reserve_mark_space: false # 横排候选固定预留标记空间，避免切换时文字移动
     max_width: 0	#set 0 to disable max width
     min_width: 160
     min_height: 0

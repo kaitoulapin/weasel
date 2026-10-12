@@ -295,6 +295,9 @@ struct UIStyle {
   int client_caps;
   int baseline;
   int linespacing;
+  // Sent separately through config.reserve_mark_space to preserve the existing
+  // serialized UIStyle format.
+  bool reserve_mark_space;
 
   UIStyle()
       : font_face(),
@@ -366,9 +369,11 @@ struct UIStyle {
         nextpage_color(0),
         baseline(0),
         linespacing(0),
-        client_caps(0) {}
+        client_caps(0),
+        reserve_mark_space(false) {}
   bool operator!=(const UIStyle& st) {
     return (
+        reserve_mark_space != st.reserve_mark_space ||
         align_type != st.align_type || antialias_mode != st.antialias_mode ||
         preedit_type != st.preedit_type || layout_type != st.layout_type ||
         vertical_text_left_to_right != st.vertical_text_left_to_right ||
