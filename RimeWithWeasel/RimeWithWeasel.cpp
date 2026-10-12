@@ -908,6 +908,8 @@ bool RimeWithWeaselHandler::_Respond(WeaselSessionId ipc_id, EatLine eat) {
   body.append(L"config.inline_preedit=")
       .append(std::to_wstring((int)session_status.style.inline_preedit))
       .append(L"\n");
+  body.append(L"config.reserve_mark_space=")
+      .append(session_status.style.reserve_mark_space ? L"1\n" : L"0\n");
 
   // style
   if (!session_status.__synced) {
@@ -1232,6 +1234,8 @@ void LoadWeaselUIStyle(RimeConfig* config,
   }
   _RimeGetIntStr(config, "style/label_format", style.label_text_format);
   _RimeGetIntStr(config, "style/mark_text", style.mark_text);
+  _RimeGetBool(config, "style/layout/reserve_mark_space", initialize,
+               style.reserve_mark_space);
   _RimeGetIntStr(config, "style/layout/baseline", style.baseline, 0, 0, _abs);
   _RimeGetIntStr(config, "style/layout/linespacing", style.linespacing, 0, 0,
                  _abs);

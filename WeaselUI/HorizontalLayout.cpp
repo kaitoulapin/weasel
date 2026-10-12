@@ -38,8 +38,10 @@ void HorizontalLayout::DoLayout() {
       int current_cand_width = 0;
       if (i > 0)
         w += _style.candidate_spacing;
-      if (id == i)
-        w += base_offset;
+      // Opt in to fixed mark space; otherwise preserve the original layout.
+      const int mark_offset =
+          (_style.reserve_mark_space || i == id) ? base_offset : 0;
+      w += mark_offset;
       /* Label */
       const auto& labelSize = _candidateLabelSizes[i];
       _candidateLabelRects[i].SetRect(w, height, w + labelSize.cx,
@@ -69,8 +71,7 @@ void HorizontalLayout::DoLayout() {
       } else /* Used for highlighted candidate calculation below */
         _candidateCommentRects[i].SetRect(w, height, w, height + textSize.cy);
 
-      int base_left = (i == id) ? _candidateLabelRects[i].left - base_offset
-                                : _candidateLabelRects[i].left;
+      int base_left = _candidateLabelRects[i].left - mark_offset;
       // if not the first candidate of current row, and current candidate's
       // right > _style.max_width
       if (_style.max_width > 0 && (base_left > real_margin_x + offsetX) &&
@@ -79,7 +80,7 @@ void HorizontalLayout::DoLayout() {
         // max_width_of_rows current row
         max_width_of_rows =
             MAX(max_width_of_rows, _candidateCommentRects[i - 1].right);
-        w = offsetX + real_margin_x + (i == id ? base_offset : 0);
+        w = offsetX + real_margin_x + mark_offset;
         int ofx = w - _candidateLabelRects[i].left;
         int ofy = height_of_rows[row_cnt] + _style.candidate_spacing;
         // offset rects to next row
@@ -109,8 +110,9 @@ void HorizontalLayout::DoLayout() {
     // reposition for alignment, exp when rect height not equal to
     // height_of_rows
     for (auto i = 0; i < candidates_count && i < MAX_CANDIDATES_COUNT; ++i) {
-      int base_left = (i == id) ? _candidateLabelRects[i].left - base_offset
-                                : _candidateLabelRects[i].left;
+      const int mark_offset =
+          (_style.reserve_mark_space || i == id) ? base_offset : 0;
+      int base_left = _candidateLabelRects[i].left - mark_offset;
       const int height_of_current_raw = height_of_rows[row_of_candidate[i]];
       _candidateRects[i].SetRect(
           base_left, mintop_of_rows[row_of_candidate[i]],
