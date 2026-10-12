@@ -434,6 +434,8 @@ bool GetStyleFieldText(const weasel::UIStyle& style,
         *out = "bottom";
         break;
     }
+  } else if (key == "style/layout/reserve_mark_space") {
+    *out = style.reserve_mark_space ? "true" : "false";
   } else if (key == "style/layout/border") {
     *out = std::to_string(style.border);
   } else if (key == "style/layout/margin_x") {
@@ -565,7 +567,9 @@ bool SetStyleFieldText(weasel::UIStyle& style,
       style.align_type = weasel::UIStyle::ALIGN_CENTER;
     else
       style.align_type = weasel::UIStyle::ALIGN_BOTTOM;
-  } else if (key == "style/layout/border")
+  } else if (key == "style/layout/reserve_mark_space")
+    style.reserve_mark_space = truthy;
+  else if (key == "style/layout/border")
     return to_int(&style.border);
   else if (key == "style/layout/margin_x")
     return to_int(&style.margin_x);
@@ -698,6 +702,11 @@ bool UIStyleSettings::ApplyStylePatches() {
         key == "style/layout/type" || key == "style/layout/align_type" ||
         key == "style/color_scheme_dark") {
       if (!api_->customize_string(settings_, key.c_str(), value.c_str()))
+        return false;
+    } else if (key == "style/layout/reserve_mark_space") {
+      if ((value != "true" && value != "false") ||
+          !api_->customize_bool(settings_, key.c_str(),
+                                value == "true" ? True : False))
         return false;
     } else if (key == "style/font_point" || key == "style/label_font_point" ||
                key == "style/comment_font_point" ||
