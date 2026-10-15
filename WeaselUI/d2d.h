@@ -163,6 +163,8 @@ struct D2D {
   struct CachedTextFormat {
     PtTextFormat format;
     uint64_t last_used;
+    float line_height;
+    float baseline;
   };
 
   static constexpr size_t kMaxTextFormatCacheEntries = 32;

@@ -4,6 +4,7 @@
 #include <VersionHelpers.hpp>
 #include <wincodec.h>
 #include <algorithm>
+#include <cmath>
 #include <regex>
 
 #pragma comment(lib, "dxguid.lib")
@@ -17,6 +18,53 @@ UINT GetDpiForWindowCompat(HWND hwnd) {
   static auto const pGetDpiForWindow = reinterpret_cast<GetDpiForWindowFunc>(
       GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDpiForWindow"));
   return pGetDpiForWindow ? pGetDpiForWindow(hwnd) : 0;
+}
+
+// Use font-wide metrics rather than the current candidate's glyph bounds.
+// A missing font or unavailable metrics leave automatic spacing disabled.
+void GetStableLineMetrics(IDWriteFactory2* factory,
+                          const std::vector<std::wstring>& fonts,
+                          IDWriteTextFormat1* format,
+                          float& height,
+                          float& baseline) {
+  ComPtr<IDWriteFontCollection> collection;
+  if (FAILED(factory->GetSystemFontCollection(&collection)))
+    return;
+  for (const auto& entry : fonts) {
+    auto family_name = entry.substr(0, entry.find(L':'));
+    const auto first = family_name.find_first_not_of(L" \t");
+    if (first == std::wstring::npos)
+      continue;
+    family_name = family_name.substr(
+        first, family_name.find_last_not_of(L" \t") - first + 1);
+    UINT32 index = 0;
+    BOOL exists = FALSE;
+    if (FAILED(
+            collection->FindFamilyName(family_name.c_str(), &index, &exists)) ||
+        !exists)
+      continue;
+    ComPtr<IDWriteFontFamily> family;
+    ComPtr<IDWriteFont> font;
+    ComPtr<IDWriteFont1> font1;
+    if (FAILED(collection->GetFontFamily(index, &family)) ||
+        FAILED(family->GetFirstMatchingFont(format->GetFontWeight(),
+                                            format->GetFontStretch(),
+                                            format->GetFontStyle(), &font)) ||
+        FAILED(font.As(&font1)))
+      continue;
+    DWRITE_FONT_METRICS1 metrics = {};
+    font1->GetMetrics(&metrics);
+    if (!metrics.designUnitsPerEm || !metrics.ascent)
+      continue;
+    const float scale = format->GetFontSize() / metrics.designUnitsPerEm;
+    const int descent = MAX(static_cast<int>(metrics.descent),
+                            -static_cast<int>(metrics.glyphBoxBottom));
+    baseline = std::ceil(metrics.ascent * scale);
+    height = baseline +
+             std::ceil((descent + MAX(0, static_cast<int>(metrics.lineGap))) *
+                       scale);
+    return;
+  }
 }
 }  // namespace
 
@@ -356,12 +404,16 @@ PtTextFormat D2D::GetOrCreateTextFormat(const std::wstring& face,
       face + L"|" + std::to_wstring(point) + L"|" + std::to_wstring((int)wrap);
 
   PtTextFormat pFormat;
+  float auto_line_height = 0;
+  float auto_baseline = 0;
   {
     std::lock_guard<std::mutex> lk(cacheMutex);
     auto it = textFormatCache.find(key);
     if (it != textFormatCache.end()) {
       it->second.last_used = ++textFormatCacheClock;
       pFormat = it->second.format;
+      auto_line_height = it->second.line_height;
+      auto_baseline = it->second.baseline;
     }
   }
 
@@ -389,6 +441,8 @@ PtTextFormat D2D::GetOrCreateTextFormat(const std::wstring& face,
     fontFaceStrVector[0] =
         std::regex_replace(fontFaceStrVector[0], styleorweight, L"");
     SetFontFallback(pFormat, fontFaceStrVector);
+    GetStableLineMetrics(m_pWriteFactory.Get(), fontFaceStrVector,
+                         pFormat.Get(), auto_line_height, auto_baseline);
 
     {
       std::lock_guard<std::mutex> lk(cacheMutex);
@@ -400,7 +454,8 @@ PtTextFormat D2D::GetOrCreateTextFormat(const std::wstring& face,
             });
         textFormatCache.erase(oldest);
       }
-      textFormatCache[key] = {pFormat, ++textFormatCacheClock};
+      textFormatCache[key] = {pFormat, ++textFormatCacheClock, auto_line_height,
+                              auto_baseline};
     }
   }
 
@@ -428,6 +483,11 @@ PtTextFormat D2D::GetOrCreateTextFormat(const std::wstring& face,
   if (m_style.linespacing && m_style.baseline) {
     pFormat->SetLineSpacing(DWRITE_LINE_SPACING_METHOD_UNIFORM,
                             point * linespacing, point * baseline);
+  } else if ((m_style.layout_type == UIStyle::LAYOUT_HORIZONTAL ||
+              m_style.layout_type == UIStyle::LAYOUT_HORIZONTAL_FULLSCREEN) &&
+             auto_line_height > 0) {
+    pFormat->SetLineSpacing(DWRITE_LINE_SPACING_METHOD_UNIFORM,
+                            auto_line_height, auto_baseline);
   } else {
     pFormat->SetLineSpacing(DWRITE_LINE_SPACING_METHOD_DEFAULT, 0, 0);
   }
